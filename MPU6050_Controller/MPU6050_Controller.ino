@@ -170,15 +170,17 @@ void loop() {
 
 void sendPotBut(){
   short pot = analogRead(POT_PIN);
+  
   byte low = (byte)(pot & 0x00FF);
   byte high = (byte)((pot >> 8) & 0x00FF);
-  
+
   byte button = (byte)(digitalRead(BUT_PIN));
 
   high |= (byte)(button << 2);
+
+  byte bytes[6] = { 48, (high >> 4) | 64, (high & 15) | 64 , (low >> 4) | 64, (low & 15) | 64 ,  10};
   
-  byte bytes[4] = {(byte)48, high, low, (byte)10};
-  Serial.write(bytes,4);
+  Serial.write(bytes,6);
 }
 
 

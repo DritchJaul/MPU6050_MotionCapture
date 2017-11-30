@@ -40,7 +40,12 @@ def main():
 
 
     scale = (0.1, 0.1, 2)
+    handScale = (0.5, 1, 0.1)
     elbow = (0,0,1)
+
+
+
+    
     vs = ( ( 1,-1, 1),
            ( 1, 1, 1),
            (-1, 1, 1),
@@ -49,6 +54,7 @@ def main():
            ( 1, 1, 0),
            (-1,-1, 0),
            (-1, 1, 0) )
+    
     es = (    (0,1),
               (0,3),
               (0,4),
@@ -61,9 +67,20 @@ def main():
               (5,1),
               (5,4),
               (5,7) )
+
+    fs = ( (0,1,2,3),
+           (4,5,6,7),
+           (0,1,4,5),
+           (2,3,6,7),
+           (0,3,4,6),
+           (1,2,5,7) )
+
+
+
+
     
     pygame.init()
-    display = (1600,1200)
+    display = (800,600)
     pygame.display.set_mode(display, DOUBLEBUF | OPENGL)
     
     gluPerspective(65, (display[0]/display[1]), 0.1, 50.0)
@@ -110,26 +127,30 @@ def main():
         glMultMatrixf(mpu1Mat)
         glPushMatrix()
         glScalef(scale[0],scale[1], scale[2])
-        renderCube(vs, es)
+        renderWireCube(vs, es)
         glPopMatrix()
 
 
         glTranslatef(scale[0] * elbow[0], scale[1] * elbow[1], scale[2] * elbow[2])
-        glRotate( -(ijoint - joint) / 4, 1, 0, 0)
+        
+        glRotate( -(ijoint - joint) / 2, 1, 0, 0)
         glPushMatrix()
         glScalef(scale[0],scale[1],scale[2])
-        renderCube(vs, es)
+        renderWireCube(vs, es)
         glPopMatrix()
-
+        
         
         glTranslatef(scale[0] * elbow[0], scale[1] * elbow[1], scale[2] * elbow[2])
-        glGetFloatv(GL_MODELVIEW_MATRIX, mpu1Mat)
-        glMultMatrixf(invertRotMat(mpu1Mat))
+        
+        glRotate( (ijoint - joint) / 2, 1, 0, 0)
+        glMultMatrixf(transpose(mpu1Mat))
+        
         glRotate(mpu2yaw + 180, 0, 1, 0)
         glMultMatrixf(quatToMat(mpuData[1]))
+        
         glPushMatrix()
-        glScalef(scale[0],scale[1],scale[2]/2)
-        renderCube(vs, es)
+        glScalef(handScale[0],handScale[1],handScale[2])
+        renderWireCube(vs, es)
         glPopMatrix()
     
         glPopMatrix()
@@ -139,14 +160,14 @@ def main():
 #        glPushMatrix()
 #        glScalef(0.1 ,0.1 ,2)
 #        glColor3f(1,0,1)
-#        renderCube(vs, es)
-#        glPopMatrix()#
+#        renderWireCube(vs, es)
+#        glPopMatrix()
 
 #        glPushMatrix()
 #        glRotate(-getYaw(mpu1Mat), 0, 1, 0)
 #        glScalef(0.1 ,0.1 ,2)
 #        glColor3f(1,0,0)
-#        renderCube(vs, es)
+#        renderWireCube(vs, es)
 #        glPopMatrix()
 
 
@@ -159,9 +180,6 @@ def main():
         pygame.display.flip()
         pygame.time.wait(5)
 
-
-def invertRotMat(mat):
-    return [row[:] for row in transpose(mat)]
 
 def transpose(mat):
     m = [row[:] for row in mat]
@@ -210,7 +228,7 @@ def swapCol(c1, c2, mat):
 
 
 def setupSensors():
-    port = 'COM8'
+    port = 'COM6'
     print("Setting up serial connection to: " + port)
     ser = serial.Serial( port , 115200,timeout=0.01)
     return ser
@@ -232,11 +250,15 @@ def readSerialRigData(serialConnection):
             sline = sline[1:-1]
             if ( (header == 49) & (len(sline) == 32)):
                 arm1 = decodeData( sline )
-            if ((header == 50) & (len(sline) == 32)):
+            if ((header     == 50) & (len(sline) == 32)):
                 arm2 = decodeData( sline )
-            if ((header == 48) & (len(sline) == 2)):                
-                button = (4 & sline[0]) >> 2
-                pot = sline[1] + ((3 & sline[0]) << 8)
+            if ((header == 48) & (len(sline) == 4)):
+                high = ((sline[0] & 15) << 4) | (sline[1] & 15)
+                low  = ((sline[2] & 15) << 4) | (sline[3] & 15)
+                
+                button = (4 & high) >> 2
+                pot = low + ((3 & high) << 8)
+                
     return [arm1,arm2,[pot,0,0,0],[button,0,0,0]]
 
 
@@ -251,11 +273,29 @@ def decodeData( line ):
 
 
 
-def renderCube(vertices, edges):
+def renderCube(vertices, faces):
     glBegin(GL_LINES)
     for edge in edges:
         for vertex in edge:
             glVertex3fv(vertices[vertex])
     glEnd()
+    
+
+def renderWireCube(vertices, edges):
+    glBegin(GL_LINES)
+    for edge in edges:
+        for vertex in edge:
+            glVertex3fv(vertices[vertex])
+    glEnd()
+
+def randerHand(vertices, edges, angle):
+    glBegin(GL_LINES)
+    for edge in edges:
+        for vertex in edge:
+            glVertex3fv(vertices[vertex])
+    glEnd()
+
+
+    
 
 main()
