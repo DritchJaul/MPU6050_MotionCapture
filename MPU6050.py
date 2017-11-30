@@ -2,7 +2,7 @@
 import time
 import struct
 import sys
-import numpy as np
+#import numpy as np
 import serial
 import math
 
@@ -18,16 +18,21 @@ def main():
     ser = setupSensors()
     print("Calibrating...")
 
-    ir = readQuat(ser)
-    iRotMat = quatToMat( ir )
-    yaw = 0
+    #
+    # [ arm1,
+    #   arm2,
+    #  [pot,   0,0,0],
+    #  [button,0,0,0] ]
+    mpuData = readSerialRigData(ser)
+
+
     print("Data flowing...")
 
     calibrate = 20
-    precal = 400
+    precal = 100
 
     for i in range(precal):
-        ir = readQuat(ser)
+        mpuData = readSerialRigData(ser)
         print(".",end='')
     
     print("!")
@@ -57,36 +62,34 @@ def main():
               (5,4),
               (5,7) )
     
-    
-
-
     pygame.init()
-    display = (800,600)
+    display = (1600,1200)
     pygame.display.set_mode(display, DOUBLEBUF | OPENGL)
     
     gluPerspective(65, (display[0]/display[1]), 0.1, 50.0)
     glTranslatef(0,-1,-7)
 
 
+    mpu1yaw = 0
+    mpu2yaw = 0
+    ijoint = 0;
+
     for i in range(calibrate):
-        ir = readQuat(ser)
-        iRotMat = quatToMat( ir )
+        mpuData = readSerialRigData(ser)
         print("|",end='')
         
-    yaw = getYaw(iRotMat)
-    
+    mpu1yaw = getYaw(quatToMat( mpuData[0] ))
+    mpu2yaw = getYaw(quatToMat( mpuData[1] ))
+    ijoint = mpuData[2][0]    
 
-    
-    print(yaw)
+    #print(yaw)
     #print(ir)
-    print( '\n'.join([ "[" + ', '.join([("%0.4f" % c).rjust(7) for c in r]) + "]" for r in iRotMat]))
+    #print( '\n'.join([ "[" + ', '.join([("%0.4f" % c).rjust(7) for c in r]) + "]" for r in iRotMat]))
     
     print("Done")
 
-    glRotate(yaw + 180, 0, 1, 0)
+    glRotate(mpu1yaw + 180, 0, 1, 0)
 
-    
-    
     print("Beginning main loop...")
     while True:
         for event in pygame.event.get():
@@ -99,17 +102,20 @@ def main():
         
         #glPushMatrix()
         glPushMatrix()
+
+        mpuData = readSerialRigData(ser)
+        mpu1Mat = quatToMat(mpuData[0])
+        joint = mpuData[2][0]
         
-        rotMat = quatToMat(readQuat(ser))
-        glMultMatrixf(rotMat)
+        glMultMatrixf(mpu1Mat)
         glPushMatrix()
         glScalef(scale[0],scale[1], scale[2])
         renderCube(vs, es)
         glPopMatrix()
 
-        glTranslatef(scale[0] * elbow[0], scale[1] * elbow[1], scale[2] *  elbow[2])        
-        glMultMatrixf(invertRotMat(rotMat))
-        glRotatef(-90,1,0,0)
+
+        glTranslatef(scale[0] * elbow[0], scale[1] * elbow[1], scale[2] * elbow[2])
+        glRotate( -(ijoint - joint) / 4, 1, 0, 0)
         glPushMatrix()
         glScalef(scale[0],scale[1],scale[2])
         renderCube(vs, es)
@@ -117,10 +123,12 @@ def main():
 
         
         glTranslatef(scale[0] * elbow[0], scale[1] * elbow[1], scale[2] * elbow[2])
-        glRotatef(90,1,0,0)
-        glMultMatrixf(rotMat)
+        glGetFloatv(GL_MODELVIEW_MATRIX, mpu1Mat)
+        glMultMatrixf(invertRotMat(mpu1Mat))
+        glRotate(mpu2yaw + 180, 0, 1, 0)
+        glMultMatrixf(quatToMat(mpuData[1]))
         glPushMatrix()
-        glScalef(scale[0],scale[1],scale[2])
+        glScalef(scale[0],scale[1],scale[2]/2)
         renderCube(vs, es)
         glPopMatrix()
     
@@ -128,18 +136,18 @@ def main():
 
 
         
-        glPushMatrix()
-        glScalef(0.1 ,0.1 ,2)
-        glColor3f(1,0,1)
-        renderCube(vs, es)
-        glPopMatrix()
+#        glPushMatrix()
+#        glScalef(0.1 ,0.1 ,2)
+#        glColor3f(1,0,1)
+#        renderCube(vs, es)
+#        glPopMatrix()#
 
-        glPushMatrix()
-        glRotate(-getYaw(rotMat), 0, 1, 0)
-        glScalef(0.1 ,0.1 ,2)
-        glColor3f(1,0,0)
-        renderCube(vs, es)
-        glPopMatrix()
+#        glPushMatrix()
+#        glRotate(-getYaw(mpu1Mat), 0, 1, 0)
+#        glScalef(0.1 ,0.1 ,2)
+#        glColor3f(1,0,0)
+#        renderCube(vs, es)
+#        glPopMatrix()
 
 
 
@@ -180,15 +188,13 @@ def getYaw( mat ):
     return math.degrees(math.acos( w[2] / math.sqrt( w[0]*w[0]  + w[2]*w[2] ) )) * (-w[0] / abs(w[0]))
     
     
-
-
-
 def align(mat):
     negCol(0,mat)
     negCol(2,mat)
     swapCol(0,2,mat)
     swapCol(1,2,mat)
     return mat
+
 
 def negCol(c, mat):
     for i in range(0, len(mat)):
@@ -204,22 +210,46 @@ def swapCol(c1, c2, mat):
 
 
 def setupSensors():
-    port = 'COM4'
+    port = 'COM8'
     print("Setting up serial connection to: " + port)
-    ser = serial.Serial( port , 115200,timeout=0.1)
+    ser = serial.Serial( port , 115200,timeout=0.01)
     return ser
 
 
-def readQuat(serialConnection):
+# Button and Pot: 48
+# Upper  arm MPU: 49
+# Lower  arm MPU: 50
+def readSerialRigData(serialConnection):
+    arm1 = [-1,0,0,0]
+    arm2 = [-1,0,0,0]
+    pot = -1
+    button = -1
     sline = ""
-    while (len(sline) != 33 or sline[0] != ord('0')):
-        sline = serialConnection.readline()[:33]
+    while ((arm1[0] == -1) | (arm2[0] == -1) | (pot == -1) | (button == -1)):
+        sline = serialConnection.readline()
+        if len(sline) > 0:
+            header = sline[0]
+            sline = sline[1:-1]
+            if ( (header == 49) & (len(sline) == 32)):
+                arm1 = decodeData( sline )
+            if ((header == 50) & (len(sline) == 32)):
+                arm2 = decodeData( sline )
+            if ((header == 48) & (len(sline) == 2)):                
+                button = (4 & sline[0]) >> 2
+                pot = sline[1] + ((3 & sline[0]) << 8)
+    return [arm1,arm2,[pot,0,0,0],[button,0,0,0]]
+
+
+
+def decodeData( line ):
     fData = bytearray()
     for i in range(4):
         for j in range(4):
-            k = 2 * (4 * i + j) + 1
-            fData.append( (sline[k] & 15 ) | ((sline[k + 1] & 15) << 4) )
+            k = 2 * (4 * i + j)
+            fData.append( (line[k] & 15 ) | ((line[k + 1] & 15) << 4) )
     return struct.unpack('4f', fData)
+
+
 
 def renderCube(vertices, edges):
     glBegin(GL_LINES)
@@ -229,5 +259,3 @@ def renderCube(vertices, edges):
     glEnd()
 
 main()
-
-
