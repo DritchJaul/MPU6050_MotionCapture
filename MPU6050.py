@@ -46,7 +46,7 @@ def main():
 
 
     
-    vs = ( ( 1,-1, 1),
+    vs = ( ( 1,-1, 1),   
            ( 1, 1, 1),
            (-1, 1, 1),
            (-1,-1, 1),
@@ -68,12 +68,12 @@ def main():
               (5,4),
               (5,7) )
 
-    fs = ( (0,1,2,3),
-           (4,5,6,7),
-           (0,1,4,5),
-           (2,3,6,7),
-           (0,3,4,6),
-           (1,2,5,7) )
+    fs = (  (7,5,4,6),
+            (2,1,5,7),
+            (3,0,1,2),
+            (6,4,0,3),
+            (4,5,1,0),
+            (2,7,6,3) )
 
 
 
@@ -82,10 +82,10 @@ def main():
     pygame.init()
     display = (800,600)
     pygame.display.set_mode(display, DOUBLEBUF | OPENGL)
-    
+    glEnable(GL_DEPTH_TEST)
     gluPerspective(65, (display[0]/display[1]), 0.1, 50.0)
     glTranslatef(0,-1,-7)
-
+    
 
     mpu1yaw = 0
     mpu2yaw = 0
@@ -115,18 +115,23 @@ def main():
                 quit()
 
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
-        glColor3f(1,1,1)
+
         
-        #glPushMatrix()
         glPushMatrix()
 
         mpuData = readSerialRigData(ser)
         mpu1Mat = quatToMat(mpuData[0])
+        mpu2Mat = quatToMat(mpuData[1])
         joint = mpuData[2][0]
+
+
         
+
         glMultMatrixf(mpu1Mat)
         glPushMatrix()
         glScalef(scale[0],scale[1], scale[2])
+        glColor3f(1,0,0)
+        renderCube(vs, fs)
         renderWireCube(vs, es)
         glPopMatrix()
 
@@ -136,9 +141,14 @@ def main():
         glRotate( -(ijoint - joint) / 2, 1, 0, 0)
         glPushMatrix()
         glScalef(scale[0],scale[1],scale[2])
+        glColor3f(0,1,0)
+        renderCube(vs, fs)
         renderWireCube(vs, es)
         glPopMatrix()
-        
+
+
+
+    
         
         glTranslatef(scale[0] * elbow[0], scale[1] * elbow[1], scale[2] * elbow[2])
         
@@ -146,37 +156,20 @@ def main():
         glMultMatrixf(transpose(mpu1Mat))
         
         glRotate(mpu2yaw + 180, 0, 1, 0)
-        glMultMatrixf(quatToMat(mpuData[1]))
+        
+        glMultMatrixf(mpu2Mat)
         
         glPushMatrix()
         glScalef(handScale[0],handScale[1],handScale[2])
+        glColor3f(0,0,1)
+        renderCube(vs, fs)
         renderWireCube(vs, es)
         glPopMatrix()
     
         glPopMatrix()
 
 
-        
-#        glPushMatrix()
-#        glScalef(0.1 ,0.1 ,2)
-#        glColor3f(1,0,1)
-#        renderWireCube(vs, es)
-#        glPopMatrix()
 
-#        glPushMatrix()
-#        glRotate(-getYaw(mpu1Mat), 0, 1, 0)
-#        glScalef(0.1 ,0.1 ,2)
-#        glColor3f(1,0,0)
-#        renderWireCube(vs, es)
-#        glPopMatrix()
-
-
-
-
-        
-        #glPopMatrix()
-
-        
         pygame.display.flip()
         pygame.time.wait(5)
 
@@ -274,14 +267,15 @@ def decodeData( line ):
 
 
 def renderCube(vertices, faces):
-    glBegin(GL_LINES)
-    for edge in edges:
-        for vertex in edge:
+    glBegin(GL_QUADS)
+    for face in faces:
+        for vertex in face:
             glVertex3fv(vertices[vertex])
     glEnd()
     
 
 def renderWireCube(vertices, edges):
+    glColor3f(1,1,1)
     glBegin(GL_LINES)
     for edge in edges:
         for vertex in edge:

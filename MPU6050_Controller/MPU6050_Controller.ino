@@ -26,9 +26,7 @@ uint8_t fifoBuffer[64]; // FIFO storage buffer
 bool dmpReady2 = false;  // set true if DMP init was successful
 uint8_t mpuIntStatus2;   // holds actual interrupt status byte from MPU
 uint8_t devStatus2;      // return status after each device operation (0 = success, !0 = error)
-uint16_t packetSize2;    // expected DMP packet size (default is 42 bytes)
 uint16_t fifoCount2;     // count of all bytes currently in FIFO
-uint8_t fifoBuffer2[64]; // FIFO storage buffer
 
 
 // orientation/motion vars
@@ -43,7 +41,6 @@ void setup() {
 
     Wire.begin();
     Wire.setClock(400000); // 400kHz I2C clock. Comment this line if having compilation difficulties
-
 
     Serial.begin(115200);
     while (!Serial); // wait for Leonardo enumeration, others continue immediately
@@ -102,7 +99,6 @@ void setup() {
         mpuIntStatus2 = mpu2.getIntStatus();
         Serial.println(F("DMP ready! Waiting for first interrupt..."));
         dmpReady2 = true;
-        packetSize2 = mpu2.dmpGetFIFOPacketSize();
     } else {
         // ERROR!
         // 1 = initial memory load failed
@@ -129,8 +125,11 @@ void setup() {
 
 void loop() {
     // if programming failed, don't try to do anything
-    if (!dmpReady) return;
-    if (!dmpReady2) return;
+    
+    if (!dmpReady || !dmpReady2){
+      Serial.println("DMP not ready!");
+      return;
+    }
 
     // get current FIFO count
     fifoCount = mpu.getFIFOCount();
@@ -143,27 +142,26 @@ void loop() {
     } else {
         // wait for correct available data length, should be a VERY short wait
         while (fifoCount < packetSize) fifoCount = mpu.getFIFOCount();
-        while (fifoCount2 < packetSize2) fifoCount2 = mpu2.getFIFOCount();
+        while (fifoCount2 < packetSize) fifoCount2 = mpu2.getFIFOCount();
 
-        
-        // read a packet from FIFO
-        mpu.getFIFOBytes(fifoBuffer, packetSize);
-        mpu2.getFIFOBytes(fifoBuffer2, packetSize2);
-        
         // track FIFO count here in case there is > 1 packet available
         // (this lets us immediately read more without waiting for an interrupt)
         fifoCount -= packetSize;
-        fifoCount2 -= packetSize2;
+        fifoCount2 -= packetSize;
 
         // Pot & But = 48
         // Upper MPU = 49
         // Lower MPU = 50
 
+        // read a packet from FIFO
+        mpu.getFIFOBytes(fifoBuffer, packetSize);
         sendQuat((byte)49, fifoBuffer);
-        sendQuat((byte)50, fifoBuffer2);
+        
+        mpu2.getFIFOBytes(fifoBuffer, packetSize);
+        sendQuat((byte)50, fifoBuffer);
+        
         sendPotBut();
         Serial.flush();
-
     }
     
 }
@@ -179,11 +177,11 @@ void sendPotBut(){
   high |= (byte)(button << 2);
 
   byte bytes[6] = { 48, (high >> 4) | 64, (high & 15) | 64 , (low >> 4) | 64, (low & 15) | 64 ,  10};
-  
+
+  //Serial.println("VVV");
   Serial.write(bytes,6);
+  //Serial.println("AAA");
 }
-
-
 
 void sendQuat(byte header, uint8_t* fifo){
   mpu.dmpGetQuaternion(&q, fifo);
@@ -199,6 +197,8 @@ void sendQuat(byte header, uint8_t* fifo){
     }
   }
   bytes[33] = 10;
+  //Serial.println("VVV");
   Serial.write(bytes,34);
+  //Serial.println("AAA");
 }
 
