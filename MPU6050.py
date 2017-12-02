@@ -15,7 +15,7 @@ from OpenGL.GLU import *
 
 def main():
         
-    ser = setupSensors()
+    ser = setupSensors('COM6')
     print("Calibrating...")
 
     #
@@ -40,7 +40,6 @@ def main():
 
 
     scale = (0.1, 0.1, 2)
-    handScale = (0.5, 1, 0.1)
     elbow = (0,0,1)
 
 
@@ -115,7 +114,6 @@ def main():
                 quit()
 
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
-
         
         glPushMatrix()
 
@@ -123,9 +121,7 @@ def main():
         mpu1Mat = quatToMat(mpuData[0])
         mpu2Mat = quatToMat(mpuData[1])
         joint = mpuData[2][0]
-
-
-        
+        button = mpuData[3][0]
 
         glMultMatrixf(mpu1Mat)
         glPushMatrix()
@@ -135,10 +131,8 @@ def main():
         renderWireCube(vs, es)
         glPopMatrix()
 
-
         glTranslatef(scale[0] * elbow[0], scale[1] * elbow[1], scale[2] * elbow[2])
-        
-        glRotate( -(ijoint - joint) / 2, 1, 0, 0)
+        glRotate( -(ijoint - joint) / 2.4, 1, 0, 0)
         glPushMatrix()
         glScalef(scale[0],scale[1],scale[2])
         glColor3f(0,1,0)
@@ -146,29 +140,14 @@ def main():
         renderWireCube(vs, es)
         glPopMatrix()
 
-
-
-    
-        
         glTranslatef(scale[0] * elbow[0], scale[1] * elbow[1], scale[2] * elbow[2])
-        
         glRotate( (ijoint - joint) / 2, 1, 0, 0)
-        glMultMatrixf(transpose(mpu1Mat))
-        
-        glRotate(mpu2yaw + 180, 0, 1, 0)
-        
+        glMultMatrixf(transpose(mpu1Mat)
+        glRotate( mpu2yaw + 180, 0, 1, 0)
         glMultMatrixf(mpu2Mat)
-        
-        glPushMatrix()
-        glScalef(handScale[0],handScale[1],handScale[2])
-        glColor3f(0,0,1)
-        renderCube(vs, fs)
-        renderWireCube(vs, es)
-        glPopMatrix()
-    
-        glPopMatrix()
+        randerHand(vs, es, fs, button, (0,0,1))
 
-
+        glPopMatrix()
 
         pygame.display.flip()
         pygame.time.wait(5)
@@ -220,10 +199,9 @@ def swapCol(c1, c2, mat):
     return mat
 
 
-def setupSensors():
-    port = 'COM6'
-    print("Setting up serial connection to: " + port)
-    ser = serial.Serial( port , 115200,timeout=0.01)
+def setupSensors(com):
+    print("Setting up serial connection to: " + com)
+    ser = serial.Serial( com , 115200,timeout=0.01)
     return ser
 
 
@@ -236,6 +214,7 @@ def readSerialRigData(serialConnection):
     pot = -1
     button = -1
     sline = ""
+    serialConnection.flushInput()
     while ((arm1[0] == -1) | (arm2[0] == -1) | (pot == -1) | (button == -1)):
         sline = serialConnection.readline()
         if len(sline) > 0:
@@ -282,7 +261,10 @@ def renderWireCube(vertices, edges):
             glVertex3fv(vertices[vertex])
     glEnd()
 
-def randerHand(vertices, edges, angle):
+
+
+def renderWireCubeC(vertices, edges, color):
+    glColor3f(color[0],color[1],color[2])
     glBegin(GL_LINES)
     for edge in edges:
         for vertex in edge:
@@ -290,6 +272,47 @@ def randerHand(vertices, edges, angle):
     glEnd()
 
 
+def renderFinger(vertices, edges, faces, button, color, segments, side):
+    openAngle = 215
+    closeAngle = 150
+
+    angle = openAngle - button * (openAngle - closeAngle)
+
+    hs = (0.1, 0.1, 0.5)
+    hj = (0,0,0.9)
+
+    glPushMatrix()
+    glRotate( -side * angle/2, 1, 0, 0)
+
+    glPushMatrix()
+    glScalef(hs[0],hs[1],hs[2])
+    glColor3f(color[0],color[1],color[2])
+    renderCube(vertices, faces)
+    renderWireCube(vertices, edges)
+    glPopMatrix()
+
+    glPushMatrix()
+    for i in range(segments):
+        glTranslatef(hs[0] * hj[0], hs[1] * hj[1], hs[2] * hj[2])
+        glRotate( side * closeAngle / segments * 0.95, 1, 0, 0)
+        glPushMatrix()
+        glScalef(hs[0],hs[1],hs[2])
+
+        glColor3f(color[0],color[1],color[2])
+        renderCube(vertices, faces)
+        renderWireCube(vertices, edges)
+        glPopMatrix()
+        
+    glPopMatrix()
+    glPopMatrix()
+
+def randerHand(vertices, edges, faces, button, color):
+    renderFinger(vertices, edges, faces, button, color, 3, 1)
+    renderFinger(vertices, edges, faces, button, color, 3, -1)
     
+    
+    
+
+
 
 main()
