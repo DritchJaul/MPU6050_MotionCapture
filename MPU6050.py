@@ -80,30 +80,26 @@ def main():
     glTranslatef(0,-2,-7)
     
 
-    mpu1yaw = 0
-    mpu2yaw = 0
-    ijoint = 0;
+    objs = [ Shape((-2,0,-4), (0.35,1,0.35), (1,0,1)),
+             Shape((0,4,-2), (0.35,1,0.35), (1,1,0)),
+             Shape((2,0,-4), (0.35,1,0.35), (0,1,1)) ]
 
     for i in range(calibrate):
         mpuData = readSerialRigData(ser)
         print("|",end='')
 
-    
     mpu1yaw = getYaw(quatToMat( mpuData[0] ))
     mpu2yaw = getYaw(quatToMat( mpuData[1] ))
     mpu2Init = quatToMat( mpuData[1] )
     ijoint = mpuData[2][0]    
     button = mpuData[3][0]
+    buttonLastFrame = 0
+    shapeGrabbed = -1
+
 
     print("Done")
 
-    
 
-    glPushMatrix()
-    glTranslatef(0,2,-3)
-    objM = glGetFloatv(GL_MODELVIEW_MATRIX)
-    objP = getPos(objM)
-    glPopMatrix()
 
     glRotate(mpu1yaw + 180, 0, 1, 0)
 
@@ -150,25 +146,43 @@ def main():
 
 
         glPushMatrix()
-        glTranslatef(0,0,0.5)
+        glTranslatef(0,0,0.60)
+        glRotate(90,0,0,1)
         endM = glGetFloatv(GL_MODELVIEW_MATRIX)
         endP = getPos(endM)
-        if button == 1  and dist(objP, endP) < 1:
-            objM = endM
+        if button == 1 and buttonLastFrame == 0:
+            closestShape = -1
+            for obj in objs:
+                if dist(obj.p, endP) < 1:
+                    if closestShape == -1:
+                        closestShape = obj
+                    elif dist(obj.p, endP) < dist(closestShape.p, endP):
+                        closestShape = obj
+            shapeGrabbed = closestShape
+        elif button == 0 and buttonLastFrame == 1:
+            shapeGrabbed = -1
+
+        if shapeGrabbed != -1:
+            shapeGrabbed.setMatrix(endM)
+
+        buttonLastFrame = button
         glPopMatrix()
 
 
         glPopMatrix()
 
-        glPushMatrix()
-        glLoadMatrixf(objM)
-        glScalef(0.5,0.5,1)
-        glScalef(1,0.7,0.7)
-        objP = getPos(objM)
-        glColor3f(1,1,1)
-        renderCube(vs, fs)
-        renderWireCube(vs, es)
-        glPopMatrix()
+        
+        for obj in objs:
+            obj.render()
+
+
+
+
+        #button = mpuData[3][0]
+        #buttonLastFrame = 0
+        #shapeGrabbed = -1
+
+
 
 
         pygame.display.flip()
@@ -362,7 +376,64 @@ def randerHand(vertices, edges, faces, button, color):
     renderFinger(vertices, edges, faces, button, color, 3, -1)
     
     
+class Shape:
+    s = (1,1,1)
+    m = [[1,0,0,0], [0,1,0,0], [0,0,1,0], [0,0,0,1]]
+    p = (0,0,0)
+    c = (1,1,1)
+
+    vs = ( ( 1,-1, 1),   
+           ( 1, 1, 1),
+           (-1, 1, 1),
+           (-1,-1, 1),
+           ( 1,-1, -1),
+           ( 1, 1, -1),
+           (-1,-1, -1),
+           (-1, 1, -1) )
     
+    es = (    (0,1),
+              (0,3),
+              (0,4),
+              (2,1),
+              (2,3),
+              (2,7),
+              (6,3),
+              (6,4),
+              (6,7),
+              (5,1),
+              (5,4),
+              (5,7) )
+
+    fs = (  (7,5,4,6),
+            (2,1,5,7),
+            (3,0,1,2),
+            (6,4,0,3),
+            (4,5,1,0),
+            (2,7,6,3) )
+
+    def __init__(self, position, scale, color):
+        self.s = scale
+        self.c = color
+        glPushMatrix()
+        glTranslatef(position[0], position[1], position[2])
+        self.m = glGetFloatv(GL_MODELVIEW_MATRIX)
+        self.p = getPos(self.m)
+        glPopMatrix()
+
+    def render(self):
+        glPushMatrix()
+        glLoadMatrixf(self.m)
+        glScalef(self.s[0], self.s[1], self.s[2])
+        glColor3f(self.c[0], self.c[1], self.c[2])
+        renderCube(self.vs, self.fs)
+        renderWireCube(self.vs, self.es)
+        glPopMatrix()
+
+
+    def setMatrix(self, mat):
+        self.m = mat
+        self.p = getPos(self.m)
+
 
 
 
