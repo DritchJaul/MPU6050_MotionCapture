@@ -5,26 +5,27 @@ import sys
 #import numpy as np
 import serial
 import math
+import os
 
 import pygame
 from pygame.locals import *
 from OpenGL.GL import *
 from OpenGL.GLU import *
-
-
+from OpenGL.GLUT import *
 
 def main():
-        
+    display = (800,600)
     ser = setupSensors('COM6')
+
     print("Calibrating...")
 
+    
     #
     # [ arm1,
     #   arm2,
     #  [pot,   0,0,0],
     #  [button,0,0,0] ]
     mpuData = readSerialRigData(ser)
-
 
     print("Data flowing...")
 
@@ -41,9 +42,6 @@ def main():
 
     scale = (0.1, 0.1, 2)
     elbow = (0,0,1)
-
-
-
     
     vs = ( ( 1,-1, 1),   
            ( 1, 1, 1),
@@ -74,16 +72,12 @@ def main():
             (4,5,1,0),
             (2,7,6,3) )
 
-
-
-
-    
     pygame.init()
-    display = (800,600)
+    
     pygame.display.set_mode(display, DOUBLEBUF | OPENGL)
     glEnable(GL_DEPTH_TEST)
     gluPerspective(65, (display[0]/display[1]), 0.1, 50.0)
-    glTranslatef(0,-1,-7)
+    glTranslatef(0,-2,-7)
     
 
     mpu1yaw = 0
@@ -93,16 +87,23 @@ def main():
     for i in range(calibrate):
         mpuData = readSerialRigData(ser)
         print("|",end='')
-        
+
+    
     mpu1yaw = getYaw(quatToMat( mpuData[0] ))
     mpu2yaw = getYaw(quatToMat( mpuData[1] ))
+    mpu2Init = quatToMat( mpuData[1] )
     ijoint = mpuData[2][0]    
+    button = mpuData[3][0]
 
-    #print(yaw)
-    #print(ir)
-    #print( '\n'.join([ "[" + ', '.join([("%0.4f" % c).rjust(7) for c in r]) + "]" for r in iRotMat]))
-    
     print("Done")
+
+    
+
+    glPushMatrix()
+    glTranslatef(0,2,-3)
+    objM = glGetFloatv(GL_MODELVIEW_MATRIX)
+    objP = getPos(objM)
+    glPopMatrix()
 
     glRotate(mpu1yaw + 180, 0, 1, 0)
 
@@ -142,20 +143,50 @@ def main():
 
         glTranslatef(scale[0] * elbow[0], scale[1] * elbow[1], scale[2] * elbow[2])
         glRotate( (ijoint - joint) / 2, 1, 0, 0)
-        glMultMatrixf(transpose(mpu1Mat)
-        glRotate( mpu2yaw + 180, 0, 1, 0)
+        glMultMatrixf(transpose(mpu1Mat))
+        glRotatef( (-mpu1yaw) - (-getYaw(mpu2Init)) , 0, 1, 0)
         glMultMatrixf(mpu2Mat)
         randerHand(vs, es, fs, button, (0,0,1))
 
+
+        glPushMatrix()
+        glTranslatef(0,0,0.5)
+        endM = glGetFloatv(GL_MODELVIEW_MATRIX)
+        endP = getPos(endM)
+        if button == 1  and dist(objP, endP) < 1:
+            objM = endM
         glPopMatrix()
+
+
+        glPopMatrix()
+
+        glPushMatrix()
+        glLoadMatrixf(objM)
+        glScalef(0.5,0.5,1)
+        glScalef(1,0.7,0.7)
+        objP = getPos(objM)
+        glColor3f(1,1,1)
+        renderCube(vs, fs)
+        renderWireCube(vs, es)
+        glPopMatrix()
+
 
         pygame.display.flip()
         pygame.time.wait(5)
+
+def getPos( mat ):
+    return [ mat[3][0], mat[3][1], mat[3][2] ]
+
+
+def dist( a, b ):
+    return math.sqrt( (a[0]- b[0])**2 + (a[1]- b[1])**2 + (a[2]- b[2])**2)
 
 
 def transpose(mat):
     m = [row[:] for row in mat]
     return [[m[j][i] for j in range(len(m))] for i in range(len(m[0]))]
+
+
 
 
 def quatToMat(vec4):
@@ -176,13 +207,26 @@ def quatToMat(vec4):
 def getYaw( mat ):
     w = [mat[2][i] for i in range(3)]    
     return math.degrees(math.acos( w[2] / math.sqrt( w[0]*w[0]  + w[2]*w[2] ) )) * (-w[0] / abs(w[0]))
-    
+
+
+
+def getCurrentYaw():
+    a = glGetFloatv(GL_MODELVIEW_MATRIX)
+    return getYaw(a)
+
+
     
 def align(mat):
     negCol(0,mat)
     negCol(2,mat)
     swapCol(0,2,mat)
     swapCol(1,2,mat)
+    return mat
+
+
+def negRow(r, mat):
+    for i in range(len(mat)):
+        mat[r][i] = -mat[r][i]
     return mat
 
 
@@ -215,8 +259,14 @@ def readSerialRigData(serialConnection):
     button = -1
     sline = ""
     serialConnection.flushInput()
+    timer = time.time()
     while ((arm1[0] == -1) | (arm2[0] == -1) | (pot == -1) | (button == -1)):
         sline = serialConnection.readline()
+        
+        if timer + 2 < time.time():
+            print( "Arduino not responding." )
+            timer = time.time()
+        
         if len(sline) > 0:
             header = sline[0]
             sline = sline[1:-1]
@@ -298,6 +348,7 @@ def renderFinger(vertices, edges, faces, button, color, segments, side):
         glPushMatrix()
         glScalef(hs[0],hs[1],hs[2])
 
+        
         glColor3f(color[0],color[1],color[2])
         renderCube(vertices, faces)
         renderWireCube(vertices, edges)
