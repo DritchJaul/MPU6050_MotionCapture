@@ -42,6 +42,7 @@ void setup() {
     Wire.begin();
     Wire.setClock(400000); // 400kHz I2C clock. Comment this line if having compilation difficulties
 
+
     Serial.begin(115200);
     while (!Serial); // wait for Leonardo enumeration, others continue immediately
 
@@ -154,6 +155,7 @@ void loop() {
         // Lower MPU = 50
 
         // read a packet from FIFO
+        
         mpu.getFIFOBytes(fifoBuffer, packetSize);
         sendQuat((byte)49, fifoBuffer);
         

@@ -13,13 +13,14 @@ from OpenGL.GL import *
 from OpenGL.GLU import *
 from OpenGL.GLUT import *
 
-def main():
-    display = (800,600)
-    ser = setupSensors('COM6')
 
+
+def main():
+    display = (1200,900)
+    ser = setupSensors('COM6')
+    
     print("Calibrating...")
 
-    
     #
     # [ arm1,
     #   arm2,
@@ -28,9 +29,9 @@ def main():
     mpuData = readSerialRigData(ser)
 
     print("Data flowing...")
-
-    calibrate = 20
-    precal = 100
+    
+    calibrate = 40
+    precal = 200
 
     for i in range(precal):
         mpuData = readSerialRigData(ser)
@@ -38,7 +39,6 @@ def main():
     
     print("!")
     print("Done calibrating.")
-
 
     scale = (0.1, 0.1, 2)
     elbow = (0,0,1)
@@ -52,37 +52,45 @@ def main():
            (-1,-1, 0),
            (-1, 1, 0) )
     
-    es = (    (0,1),
-              (0,3),
-              (0,4),
-              (2,1),
-              (2,3),
-              (2,7),
-              (6,3),
-              (6,4),
-              (6,7),
-              (5,1),
-              (5,4),
-              (5,7) )
-
-    fs = (  (7,5,4,6),
-            (2,1,5,7),
-            (3,0,1,2),
-            (6,4,0,3),
-            (4,5,1,0),
-            (2,7,6,3) )
+    fs = (  (7,5,4,6),  # (0,0,-1)
+            (2,1,5,7),  # (0,1,0)
+            (3,0,1,2),  # (0,0,1)
+            (6,4,0,3),  # (0,-1,0)
+            (4,5,1,0),  # (1,0,0)
+            (2,7,6,3) ) # (-1,0,0)
 
     pygame.init()
     
     pygame.display.set_mode(display, DOUBLEBUF | OPENGL)
+    
+    gluPerspective(75, (display[0]/display[1]), 0.1, 150.0)
+
     glEnable(GL_DEPTH_TEST)
-    gluPerspective(65, (display[0]/display[1]), 0.1, 50.0)
-    glTranslatef(0,-2,-7)
+
+    #glColorMaterial ( GL_FRONT_AND_BACK, GL_EMISSION )
+    glColorMaterial ( GL_FRONT_AND_BACK, GL_AMBIENT_AND_DIFFUSE )
+    glEnable ( GL_COLOR_MATERIAL ) 
+    glEnable(GL_LIGHTING)
+
+
+    glLightfv(GL_LIGHT0, GL_POSITION,  (1,1,0,0.1))
+    glLightfv(GL_LIGHT0, GL_AMBIENT, (0,0,0,1))
+    glLightfv(GL_LIGHT0, GL_DIFFUSE, (1,1,1,1))
+    glLightfv(GL_LIGHT0, GL_SPECULAR, (1,1,1,1))
+    glEnable(GL_LIGHT0)
+
+    
+    glTranslatef(0,-2,-4)
     
 
     objs = [ Shape((-2,0,-4), (0.35,1,0.35), (1,0,1)),
              Shape((0,4,-2), (0.35,1,0.35), (1,1,0)),
              Shape((2,0,-4), (0.35,1,0.35), (0,1,1)) ]
+
+    terrain = [ Shape((0,-2,0), (100,1,100), (0.6,0.6,0.6)),
+                Shape((0,-2,-30), (100,100,1), (0.6,0.6,0.6))]
+
+    
 
     for i in range(calibrate):
         mpuData = readSerialRigData(ser)
@@ -125,7 +133,6 @@ def main():
         glScalef(scale[0],scale[1], scale[2])
         glColor3f(1,0,0)
         renderCube(vs, fs)
-        renderWireCube(vs, es)
         glPopMatrix()
 
         glTranslatef(scale[0] * elbow[0], scale[1] * elbow[1], scale[2] * elbow[2])
@@ -134,7 +141,6 @@ def main():
         glScalef(scale[0],scale[1],scale[2])
         glColor3f(0,1,0)
         renderCube(vs, fs)
-        renderWireCube(vs, es)
         glPopMatrix()
 
         glTranslatef(scale[0] * elbow[0], scale[1] * elbow[1], scale[2] * elbow[2])
@@ -142,7 +148,7 @@ def main():
         glMultMatrixf(transpose(mpu1Mat))
         glRotatef( (-mpu1yaw) - (-getYaw(mpu2Init)) , 0, 1, 0)
         glMultMatrixf(mpu2Mat)
-        randerHand(vs, es, fs, button, (0,0,1))
+        randerHand(vs, fs, button, (0,0,1))
 
 
         glPushMatrix()
@@ -175,15 +181,9 @@ def main():
         for obj in objs:
             obj.render()
 
-
-
-
-        #button = mpuData[3][0]
-        #buttonLastFrame = 0
-        #shapeGrabbed = -1
-
-
-
+        for obj in terrain:
+            obj.render()
+        
 
         pygame.display.flip()
         pygame.time.wait(5)
@@ -311,32 +311,30 @@ def decodeData( line ):
 
 def renderCube(vertices, faces):
     glBegin(GL_QUADS)
-    for face in faces:
-        for vertex in face:
+
+    fn = (  ( 0, 0,-1),
+            ( 0, 1, 0),
+            ( 0, 0, 1),
+            ( 0,-1, 0),
+            ( 1, 0, 0),
+            (-1, 0, 0) )
+
+    for face in range(len(faces)):
+        glNormal3f(fn[face][0], fn[face][1], fn[face][2])
+        for vertex in faces[face]:
             glVertex3fv(vertices[vertex])
+
+
+    #for face in faces:
+    #    for vertex in face:
+    #        glVertex3fv(vertices[vertex])
     glEnd()
     
 
-def renderWireCube(vertices, edges):
-    glColor3f(1,1,1)
-    glBegin(GL_LINES)
-    for edge in edges:
-        for vertex in edge:
-            glVertex3fv(vertices[vertex])
-    glEnd()
 
 
 
-def renderWireCubeC(vertices, edges, color):
-    glColor3f(color[0],color[1],color[2])
-    glBegin(GL_LINES)
-    for edge in edges:
-        for vertex in edge:
-            glVertex3fv(vertices[vertex])
-    glEnd()
-
-
-def renderFinger(vertices, edges, faces, button, color, segments, side):
+def renderFinger(vertices, faces, button, color, segments, side):
     openAngle = 215
     closeAngle = 150
 
@@ -352,7 +350,6 @@ def renderFinger(vertices, edges, faces, button, color, segments, side):
     glScalef(hs[0],hs[1],hs[2])
     glColor3f(color[0],color[1],color[2])
     renderCube(vertices, faces)
-    renderWireCube(vertices, edges)
     glPopMatrix()
 
     glPushMatrix()
@@ -361,19 +358,16 @@ def renderFinger(vertices, edges, faces, button, color, segments, side):
         glRotate( side * closeAngle / segments * 0.95, 1, 0, 0)
         glPushMatrix()
         glScalef(hs[0],hs[1],hs[2])
-
-        
         glColor3f(color[0],color[1],color[2])
         renderCube(vertices, faces)
-        renderWireCube(vertices, edges)
         glPopMatrix()
         
     glPopMatrix()
     glPopMatrix()
 
-def randerHand(vertices, edges, faces, button, color):
-    renderFinger(vertices, edges, faces, button, color, 3, 1)
-    renderFinger(vertices, edges, faces, button, color, 3, -1)
+def randerHand(vertices, faces, button, color):
+    renderFinger(vertices, faces, button, color, 3, 1)
+    renderFinger(vertices,  faces, button, color, 3, -1)
     
     
 class Shape:
@@ -391,18 +385,6 @@ class Shape:
            (-1,-1, -1),
            (-1, 1, -1) )
     
-    es = (    (0,1),
-              (0,3),
-              (0,4),
-              (2,1),
-              (2,3),
-              (2,7),
-              (6,3),
-              (6,4),
-              (6,7),
-              (5,1),
-              (5,4),
-              (5,7) )
 
     fs = (  (7,5,4,6),
             (2,1,5,7),
@@ -426,7 +408,6 @@ class Shape:
         glScalef(self.s[0], self.s[1], self.s[2])
         glColor3f(self.c[0], self.c[1], self.c[2])
         renderCube(self.vs, self.fs)
-        renderWireCube(self.vs, self.es)
         glPopMatrix()
 
 
